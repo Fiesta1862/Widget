@@ -323,6 +323,8 @@ class OverlayService : Service() {
 
     private fun buildOverlay() {
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val touchThrough = prefs.getBoolean("touch_through", true)
 
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -382,11 +384,10 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                (if (touchThrough) WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE else 0),
             PixelFormat.TRANSLUCENT
         )
         overlayParams.gravity = Gravity.BOTTOM or Gravity.END
-        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
         val screen = resources.displayMetrics
         val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
         val minY = 0
@@ -394,6 +395,49 @@ class OverlayService : Service() {
         // Start near the top-right; dragging can move the buddy across the full screen.
         overlayParams.x = prefs.getInt("overlay_x", dp(8)).coerceIn(0, maxX)
         overlayParams.y = prefs.getInt("overlay_y", maxY).coerceIn(minY, maxY)
+
+        if (!touchThrough) {
+            var downX = 0f
+            var downY = 0f
+            var startX = 0
+            var startY = 0
+            var moved = false
+            sprite.setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.rawX
+                        downY = event.rawY
+                        startX = overlayParams.x
+                        startY = overlayParams.y
+                        moved = false
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX - downX
+                        val dy = event.rawY - downY
+                        if (kotlin.math.abs(dx) > dp(3) || kotlin.math.abs(dy) > dp(3) || moved) {
+                            moved = true
+                            val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
+                            val maxY = (screen.heightPixels - dp(88)).coerceAtLeast(0)
+                            overlayParams.x = (startX - dx.toInt()).coerceIn(0, maxX)
+                            overlayParams.y = (startY - dy.toInt()).coerceIn(0, maxY)
+                            try { wm.updateViewLayout(root, overlayParams) } catch (_: Exception) { }
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (moved) {
+                            prefs.edit()
+                                .putInt("overlay_x", overlayParams.x)
+                                .putInt("overlay_y", overlayParams.y)
+                                .apply()
+                        }
+                        true
+                    }
+                    else -> true
+                }
+            }
+        }
         try {
             wm.addView(root, overlayParams)
             overlayAdded = true
