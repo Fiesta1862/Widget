@@ -1,0 +1,117 @@
+name: Build APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The runner image already ships the Android SDK. We only accept licenses and make sure
+      # platform 34 + build-tools exist. Every command is allowed to fail softly; Gradle can
+      # still auto-download missing pieces once licenses are accepted.
+      - name: Set up Android SDK
+        shell: bash
+        run: |
+          set +e
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK" > local.properties
+          SDKM="$(command -v sdkmanager)"
+          if [ -z "$SDKM" ]; then SDKM="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -n1)"; fi
+          echo "sdkmanager: $SDKM"
+          if [ -n "$SDKM" ]; then
+            yes | "$SDKM" --licenses > /dev/null 2>&1
+            for i in 1 2 3; do
+              "$SDKM" "platforms;android-34" "build-tools;34.0.0" "platform-tools" && break
+              sleep 5
+            done
+          fi
+          ls "$SDK/platforms" "$SDK/build-tools" 2>/dev/null
+          exit 0
+
+      - name: Fetch optional pixel font
+        shell: bash
+        run: |
+          set +e
+          mkdir -p app/src/main/assets
+          if [ ! -f app/src/main/assets/pixel.ttf ]; then
+            curl -fsSL --retry 3 -o app/src/main/assets/pixel.ttf \
+              "https://github.com/google/fonts/raw/main/ofl/vt323/VT323-Regular.ttf" \
+              || rm -f app/src/main/assets/pixel.ttf
+          fi
+          ls -la app/src/main/assets
+          exit 0
+
+      # No gradle wrapper needed: this installs Gradle 8.9 directly.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+          cache-disabled: true
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set +e
+          for i in 1 2 3; do
+            echo "=== build attempt $i ==="
+            gradle assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee -a build-log.txt
+            if ls app/build/outputs/apk/debug/*.apk > /dev/null 2>&1; then
+              echo "APK built."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Build failed after 3 attempts. See the build-log artifact."
+          exit 1
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-log.txt
+          if-no-files-found: ignore
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScreenBuddy-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      # Nice-to-have: a permanent download link under Releases. Never fails the build.
+      - name: Publish APK to Releases
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest app/build/outputs/apk/debug/*.apk \
+            --title "Latest APK" \
+            --notes "Auto-built from ${GITHUB_SHA::7}" \
+            --target "$GITHUB_SHA"
