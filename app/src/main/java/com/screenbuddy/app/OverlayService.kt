@@ -9,6 +9,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -253,10 +255,33 @@ class OverlayService : Service() {
             (if (recent.isNotEmpty()) "\\nAvoid repeating these recent lines or their phrasing: " + recent.joinToString(" | ") else "")
     }
 
+    private fun hasValidatedInternet(): Boolean {
+        return try {
+            val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (_: Exception) { false }
+    }
+
+    private fun offlineLine(): String {
+        val lines = listOf(
+            "I'm still here. My online screen-reading is paused until the connection returns.",
+            "Offline mode is on. I'll keep hanging out while you use your phone.",
+            "No internet right now, but your pixel buddy is still active.",
+            "I can still animate and stay on screen. Online reactions will return when you're connected."
+        )
+        return lines[(System.currentTimeMillis() / 1000L % lines.size).toInt()]
+    }
+
     private fun askNow() {
         if (busy) return
-        if (apiKey.isBlank()) { say("Put your OpenRouter key in the app first."); return }
-        if (vd == null) { say("I can't see your screen. Restart me from the app."); return }
+        if (apiKey.isBlank() || !hasValidatedInternet()) {
+            say(offlineLine())
+            return
+        }
+        if (vd == null) { say("Screen viewing is unavailable. Your buddy is still here offline."); return }
         busy = true
 
         // hide ourselves so the buddy doesn't appear in its own screenshot
