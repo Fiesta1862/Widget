@@ -329,10 +329,14 @@ class OverlayService : Service() {
                         val slop = ViewConfiguration.get(this@OverlayService).scaledTouchSlop
                         if (dragging || kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop) {
                             dragging = true
-                            val maxX = (resources.displayMetrics.widthPixels - dp(88)).coerceAtLeast(0)
-                            val maxY = (resources.displayMetrics.heightPixels - dp(100)).coerceAtLeast(0)
+                            val screen = resources.displayMetrics
+                            val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
+                            // Keep the buddy in the upper part of the display. The lower
+                            // area is reserved for the on-screen keyboard and its keys.
+                            val minY = (screen.heightPixels * 0.45f).toInt()
+                            val maxY = (screen.heightPixels - dp(100)).coerceAtLeast(minY)
                             overlayParams.x = (startWindowX - dx.toInt()).coerceIn(0, maxX)
-                            overlayParams.y = (startWindowY - dy.toInt()).coerceIn(0, maxY)
+                            overlayParams.y = (startWindowY - dy.toInt()).coerceIn(minY, maxY)
                             try { wm.updateViewLayout(root, overlayParams) } catch (_: Exception) { }
                         }
                         true
@@ -410,8 +414,13 @@ class OverlayService : Service() {
         )
         overlayParams.gravity = Gravity.BOTTOM or Gravity.END
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
-        overlayParams.x = prefs.getInt("overlay_x", dp(8))
-        overlayParams.y = prefs.getInt("overlay_y", dp(80))
+        val screen = resources.displayMetrics
+        val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
+        val minY = (screen.heightPixels * 0.45f).toInt()
+        val maxY = (screen.heightPixels - dp(100)).coerceAtLeast(minY)
+        // Start at the top-right so the buddy never covers the keyboard by default.
+        overlayParams.x = prefs.getInt("overlay_x", dp(8)).coerceIn(0, maxX)
+        overlayParams.y = prefs.getInt("overlay_y", maxY).coerceIn(minY, maxY)
         try {
             wm.addView(root, overlayParams)
             overlayAdded = true
