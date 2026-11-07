@@ -59,8 +59,6 @@ class OverlayService : Service() {
     private lateinit var dialog: LinearLayout
     private lateinit var textView: TextView
     private lateinit var overlayParams: WindowManager.LayoutParams
-    private lateinit var quietButton: TextView
-    private var quietMode = false
     private var downRawX = 0f
     private var downRawY = 0f
     private var startWindowX = 0
@@ -106,7 +104,6 @@ class OverlayService : Service() {
         model = prefs.getString("model", OpenRouter.DEFAULT_MODEL) ?: OpenRouter.DEFAULT_MODEL
         character = Characters.byId(prefs.getString("char", null))
         intervalSec = prefs.getInt("interval", 30)
-        quietMode = prefs.getBoolean("quiet_mode", false)
         if (intervalSec in 1..9) intervalSec = 10
 
         bgThread = HandlerThread("screenbuddy-bg").also { it.start() }
@@ -220,18 +217,20 @@ class OverlayService : Service() {
 
     private val auto = object : Runnable {
         override fun run() {
-            if (!quietMode) askNow()
+            askNow()
             if (intervalSec > 0) ui.postDelayed(this, intervalSec * 1000L)
         }
     }
 
     private fun systemPrompt(): String =
-        character.persona + "\nRules: you are given a screenshot of the user's phone. React to what they are " +
-            "doing in ONE or TWO short sentences (max 25 words). Stay fully in character. No emojis, no markdown, " +
-            "no quotation marks around the reply. Never read out passwords, codes or private messages. " +
-            "Do not interrupt typing or focused work. If the on-screen keyboard is visible, a text field is being " +
-            "edited, or the user appears to be composing a message, output exactly [KEYBOARD] and nothing else." +
-            (if (recent.isNotEmpty()) "\nDon't repeat these earlier lines: " + recent.joinToString(" | ") else "")
+        character.persona + "\nRules: you are given a screenshot of the user's phone. React in ONE OR TWO short sentences (max 25 words). " +
+            "Be spontaneous, playful, and context-aware: make a fresh observation, reaction, question, encouragement, or joke connected to what is actually visible. " +
+            "Vary your wording and mood so you feel like a lively companion, not a repetitive screen narrator. " +
+            "Sometimes use a light, playful apology as a random catchphrase, such as 'Oops, sorry for blocking your keys!', but never claim you really blocked anything. " +
+            "Do not assume actions that are not visible. If the user is typing, comment briefly about the visible activity without asking them to stop. " +
+            "No emojis, no markdown, no quotation marks. Never read out passwords, codes, or private messages. " +
+            "Do not output control tokens." +
+            (if (recent.isNotEmpty()) "\nAvoid repeating these recent lines or their phrasing: " + recent.joinToString(" | ") else "")
 
     private fun askNow() {
         if (busy) return
@@ -252,23 +251,9 @@ class OverlayService : Service() {
             } else {
                 try {
                     val reply = OpenRouter.ask(apiKey, model, systemPrompt(), b64)
-                    if (reply.trim().equals("[KEYBOARD]", ignoreCase = true)) {
-                        ui.post {
-                            quietMode = true
-                            getSharedPreferences("prefs", MODE_PRIVATE).edit()
-                                .putBoolean("quiet_mode", true).apply()
-                            updateQuietButton()
-                            say("Oops, sorry for blocking your keys! I'll stay out of the way.")
-                            ui.postDelayed({ hideDialog() }, 2600)
-                            busy = false
-                        }
-                    } else if (reply.trim().equals("[QUIET]", ignoreCase = true)) {
-                        ui.post { hideDialog(); busy = false }
-                    } else {
-                        recent.add(reply)
-                        while (recent.size > 3) recent.removeAt(0)
-                        ui.post { say(reply); busy = false }
-                    }
+                    recent.add(reply)
+                    while (recent.size > 5) recent.removeAt(0)
+                    ui.post { say(reply); busy = false }
                 } catch (e: Exception) {
                     val msg = (e.message ?: e.javaClass.simpleName).take(140)
                     ui.post { say("Error: $msg"); busy = false }
@@ -387,34 +372,10 @@ class OverlayService : Service() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
         }
-        quietButton = TextView(this).apply {
-            textSize = 10f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setPadding(dp(9), dp(7), dp(9), dp(7))
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(35, 42, 58))
-                cornerRadius = dp(8).toFloat()
-                setStroke(dp(1), Color.rgb(115, 130, 155))
-            }
-            setOnClickListener {
-                quietMode = !quietMode
-                getSharedPreferences("prefs", MODE_PRIVATE).edit()
-                    .putBoolean("quiet_mode", quietMode).apply()
-                updateQuietButton()
-                if (quietMode) hideDialog()
-            }
-        }
-        characterRow.addView(quietButton, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { rightMargin = dp(8) })
         characterRow.addView(sprite, LinearLayout.LayoutParams(dp(72), dp(72)))
         root.addView(characterRow, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.END; topMargin = dp(4) })
-        updateQuietButton()
-
         overlayParams = WindowManager.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -437,10 +398,6 @@ class OverlayService : Service() {
         } catch (e: Exception) {
             stopSelf()
         }
-    }
-
-    private fun updateQuietButton() {
-        quietButton.text = if (quietMode) "▶ RESUME" else "Ⅱ QUIET"
     }
 
     private val hideRunnable = Runnable { hideDialog() }
