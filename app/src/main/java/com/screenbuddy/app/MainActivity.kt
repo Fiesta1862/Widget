@@ -71,11 +71,6 @@ class MainActivity : Activity() {
             if (bold) typeface = Typeface.create("sans-serif", Typeface.BOLD)
         }
 
-    private fun vertical(gap: Int = 0) = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        if (gap > 0) showDividers(LinearLayout.SHOW_DIVIDER_NONE)
-    }
-
     private fun sectionCard(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(18), dp(17), dp(18), dp(18))
