@@ -10,6 +10,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -31,6 +32,7 @@ import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.util.Base64
+import android.net.Uri
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -83,6 +85,10 @@ class OverlayService : Service() {
     private var model = OpenRouter.DEFAULT_MODEL
     private var intervalSec = 30
     private lateinit var character: Character
+    private var customSprite: Bitmap? = null
+    private var customName = ""
+    private var customPersonality = ""
+    private var customImageError = false
     private val recent = mutableListOf<String>()
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -102,7 +108,15 @@ class OverlayService : Service() {
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
         apiKey = prefs.getString("key", "") ?: ""
         model = prefs.getString("model", OpenRouter.DEFAULT_MODEL) ?: OpenRouter.DEFAULT_MODEL
-        character = Characters.byId(prefs.getString("char", null))
+        val selectedCharacter = prefs.getString("char", null)
+        character = Characters.byId(selectedCharacter)
+        customName = prefs.getString("custom_name", "")?.trim().orEmpty()
+        customPersonality = prefs.getString("custom_personality", "")?.trim().orEmpty()
+        if (selectedCharacter == "custom") {
+            val imageUri = prefs.getString("custom_image_uri", null)
+            customSprite = imageUri?.let { loadCustomSprite(it) }
+            customImageError = customSprite == null
+        }
         intervalSec = prefs.getInt("interval", 30)
         if (intervalSec in 1..9) intervalSec = 10
 
@@ -116,7 +130,11 @@ class OverlayService : Service() {
         @Suppress("DEPRECATION")
         val data = intent.getParcelableExtra<Intent>("data")
         if (data != null && setupProjection(code, data)) {
-            say(character.greeting)
+            say(if (customSprite != null) {
+                "Hey, I'm ${customName.ifBlank { "your custom buddy" }}. Let's go!"
+            } else if (customImageError) {
+                "I couldn't load that custom image, so I'm using the selected built-in character."
+            } else character.greeting)
             if (intervalSec > 0) ui.postDelayed(auto, intervalSec * 1000L)
         } else {
             say("I can't see your screen. Open the app and press START again.")
@@ -222,15 +240,18 @@ class OverlayService : Service() {
         }
     }
 
-    private fun systemPrompt(): String =
-        character.persona + "\nRules: you are given a screenshot of the user's phone. React in ONE OR TWO short sentences (max 25 words). " +
+    private fun systemPrompt(): String {
+        val identity = if (customName.isNotBlank()) "Your character name is $customName. " else ""
+        val persona = customPersonality.ifBlank { character.persona }
+        return identity + persona + "\\nRules: you are given a screenshot of the user's phone. React in ONE OR TWO short sentences (max 25 words). " +
             "Be spontaneous, playful, and context-aware: make a fresh observation, reaction, question, encouragement, or joke connected to what is actually visible. " +
             "Vary your wording and mood so you feel like a lively companion, not a repetitive screen narrator. " +
             "Sometimes use a light, playful apology as a random catchphrase, such as 'Oops, sorry for blocking your keys!', but never claim you really blocked anything. " +
             "Do not assume actions that are not visible. If the user is typing, comment briefly about the visible activity without asking them to stop. " +
             "No emojis, no markdown, no quotation marks. Never read out passwords, codes, or private messages. " +
             "Do not output control tokens." +
-            (if (recent.isNotEmpty()) "\nAvoid repeating these recent lines or their phrasing: " + recent.joinToString(" | ") else "")
+            (if (recent.isNotEmpty()) "\\nAvoid repeating these recent lines or their phrasing: " + recent.joinToString(" | ") else "")
+    }
 
     private fun askNow() {
         if (busy) return
@@ -262,6 +283,30 @@ class OverlayService : Service() {
         }, 350)
     }
 
+    /** Load an imported image safely and turn it into a small pixel-art sprite. */
+    private fun loadCustomSprite(uriText: String): Bitmap? {
+        return try {
+            val uri = Uri.parse(uriText)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            } ?: return null
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 512) sample *= 2
+            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            val decoded = contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, options)
+            } ?: return null
+            val pixelSprite = PixelArt.pixelate(decoded, 16)
+            if (decoded !== pixelSprite && !decoded.isRecycled) decoded.recycle()
+            pixelSprite
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     // ---------- the look ----------
 
     private fun pixelFont(): Typeface = try {
@@ -289,7 +334,7 @@ class OverlayService : Service() {
             }
         }
         val portrait = ImageView(this).apply {
-            setImageDrawable(crisp(PixelArt.render(character, 4, character.portrait ?: character.sprite)))
+            setImageDrawable(customSprite?.let { crisp(PixelArt.scaleNearest(it, 4)) } ?: crisp(PixelArt.render(character, 4, character.portrait ?: character.sprite)))
             scaleType = ImageView.ScaleType.FIT_XY
         }
         box.addView(portrait, LinearLayout.LayoutParams(dp(56), dp(56)).apply { rightMargin = dp(10) })
@@ -305,7 +350,7 @@ class OverlayService : Service() {
         dialog = box
 
         val sprite = ImageView(this).apply {
-            setImageDrawable(crisp(PixelArt.render(character, 8)))
+            setImageDrawable(customSprite?.let { crisp(PixelArt.scaleNearest(it, 8)) } ?: crisp(PixelArt.render(character, 8)))
             scaleType = ImageView.ScaleType.FIT_XY
             setOnTouchListener { _, event ->
                 when (event.action) {
@@ -326,10 +371,9 @@ class OverlayService : Service() {
                             dragging = true
                             val screen = resources.displayMetrics
                             val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
-                            // Keep the buddy in the upper part of the display. The lower
-                            // area is reserved for the on-screen keyboard and its keys.
-                            val minY = (screen.heightPixels * 0.55f).toInt()
-                            val maxY = (screen.heightPixels - dp(100)).coerceAtLeast(minY)
+                            // Allow movement across the full display height.
+                            val minY = 0
+                            val maxY = (screen.heightPixels - dp(88)).coerceAtLeast(0)
                             overlayParams.x = (startWindowX - dx.toInt()).coerceIn(0, maxX)
                             overlayParams.y = (startWindowY - dy.toInt()).coerceIn(minY, maxY)
                             try { wm.updateViewLayout(root, overlayParams) } catch (_: Exception) { }
@@ -387,9 +431,9 @@ class OverlayService : Service() {
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
         val screen = resources.displayMetrics
         val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
-        val minY = (screen.heightPixels * 0.55f).toInt()
-        val maxY = (screen.heightPixels - dp(100)).coerceAtLeast(minY)
-        // Start at the top-right so the buddy never covers the keyboard by default.
+        val minY = 0
+        val maxY = (screen.heightPixels - dp(88)).coerceAtLeast(0)
+        // Start near the top-right; dragging can move the buddy across the full screen.
         overlayParams.x = prefs.getInt("overlay_x", dp(8)).coerceIn(0, maxX)
         overlayParams.y = prefs.getInt("overlay_y", maxY).coerceIn(minY, maxY)
         try {
@@ -486,6 +530,7 @@ class OverlayService : Service() {
         }
         try { projection?.stop() } catch (e: Exception) { }
         try { blipTrack?.release() } catch (e: Exception) { }
+        try { customSprite?.recycle() } catch (e: Exception) { }
         bgThread?.quitSafely()
         super.onDestroy()
     }
