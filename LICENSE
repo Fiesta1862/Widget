@@ -1,21 +1,227 @@
-MIT License
+SCREENBUDDY — SOFTWARE LICENSE
 
+MIT LICENSE WITH EXTENDED PROJECT TERMS AND NOTICES
+
+Project: ScreenBuddy
+Repository: https://github.com/Fiesta1862/Widget
 Copyright (c) 2026 Fiesta1862
+License: MIT License
+License Version: 1.0
+Effective Year: 2026
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+---
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. INTRODUCTION
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+ScreenBuddy is an Android application designed to provide an interactive floating pixel character experience.
+
+The project includes application source code, interface components, character assets, custom character functionality, personality configuration, screen interaction features, and other supporting resources.
+
+This license establishes the permissions and conditions governing the use, copying, modification, distribution, and redistribution of the software contained in this repository.
+
+The purpose of this document is to clearly communicate the rights granted to users and developers while preserving the original copyright and license notices.
+
+2. COPYRIGHT OWNERSHIP
+
+Unless otherwise identified, the original ScreenBuddy source code and project materials are copyrighted by:
+
+Copyright Holder: Fiesta1862
+Year: 2026
+Official Repository: https://github.com/Fiesta1862/Widget
+
+Copyright ownership remains with the original copyright holder and the respective owners of third-party materials.
+
+Nothing in this license transfers ownership of the original project to another person or organization.
+
+3. MIT LICENSE GRANT
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+4. PERMITTED USES
+
+Under the MIT License, users are permitted to:
+
+- Download and use the project.
+- Study and inspect the source code.
+- Modify the application for personal purposes.
+- Create modified versions of the application.
+- Distribute original or modified copies.
+- Include the software in other projects.
+- Use the software for educational purposes.
+- Use the software in commercial projects.
+- Fork the repository.
+- Create derivative software based on the original source code.
+- Publish modifications and improvements.
+- Build and distribute Android application packages.
+
+All permitted activities remain subject to the conditions of the MIT License and applicable laws.
+
+5. MODIFICATION AND REDISTRIBUTION
+
+Developers may modify the source code, interface, application functionality, configuration, and other components of ScreenBuddy.
+
+Redistributed copies must retain the original copyright notice and applicable MIT license notice.
+
+Modifications do not automatically transfer ownership of the original work to the person making those modifications.
+
+Developers distributing modified versions are encouraged to identify their changes clearly.
+
+6. ATTRIBUTION REQUIREMENTS
+
+When redistributing the original software or substantial portions of its source code, the original copyright notice and MIT permission notice must remain included.
+
+Suggested attribution:
+
+Original project: ScreenBuddy
+Original developer: Fiesta1862
+Repository: https://github.com/Fiesta1862/Widget
+Original copyright: Copyright (c) 2026 Fiesta1862
+
+Attribution should not falsely imply endorsement, sponsorship, or official involvement by the original developer.
+
+7. PROJECT ASSETS AND CHARACTERS
+
+ScreenBuddy may contain or support:
+
+- Pixel character graphics.
+- Character images.
+- Custom character imports.
+- Application icons.
+- Interface graphics.
+- Animations.
+- Visual interface elements.
+- Other application resources.
+
+The MIT License applies to materials owned by the project copyright holder.
+
+Third-party images, fonts, libraries, icons, and other externally sourced resources may have separate licensing conditions. Their original licenses remain applicable.
+
+Users are responsible for checking the licensing status of materials they independently add to or redistribute with the application.
+
+8. THIRD-PARTY SERVICES AND DEPENDENCIES
+
+ScreenBuddy may interact with external services, libraries, APIs, and development tools.
+
+These may include:
+
+- OpenRouter API.
+- Android SDK.
+- Kotlin libraries.
+- Gradle dependencies.
+- Other third-party software components.
+
+Such services and dependencies are not automatically owned by the ScreenBuddy project.
+
+Their respective terms of service, privacy policies, and licenses remain independent of this license.
+
+Use of external services may require separate accounts, API credentials, or acceptance of additional terms.
+
+9. API KEYS AND USER CONFIGURATION
+
+Users are responsible for managing their own API keys and external service credentials.
+
+The original developer does not grant ownership or unrestricted access to third-party API services through this software.
+
+Users should not publish personal API keys, access tokens, passwords, or other confidential credentials in public repositories.
+
+10. PRIVACY AND DATA HANDLING
+
+ScreenBuddy includes features that interact with the Android screen.
+
+Depending on the user's configuration and actions, screen content may be transmitted to an external AI service for processing.
+
+Users should understand the behavior of the application before enabling screen-related features.
+
+Imported character images may be processed locally by the application.
+
+This license does not replace any separate privacy policy or external service privacy agreement.
+
+Users are responsible for ensuring that their use of the application respects the privacy and rights of other people.
+
+11. APPLICATION MODIFICATIONS
+
+Developers may independently create:
+
+- New character systems.
+- Additional personality configurations.
+- Interface improvements.
+- Animation enhancements.
+- New application settings.
+- Performance improvements.
+- Additional Android functionality.
+- Compatibility updates.
+- Bug fixes.
+
+Such modifications may be distributed under the MIT License, provided the required copyright and permission notices are retained.
+
+12. NAME AND BRANDING
+
+The project name ScreenBuddy, its original branding, and associated identity should not be used in a manner that falsely suggests an official release, endorsement, or partnership.
+
+The MIT License does not grant trademark rights.
+
+Any separately protected trademarks, logos, or branding remain subject to their respective owners' rights.
+
+13. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+14. LIMITATION OF LIABILITY
+
+The software is provided without guarantees concerning uninterrupted availability, compatibility, reliability, or error-free operation.
+
+The original developer does not guarantee that the application will work on every Android device or Android version.
+
+Users and distributors are responsible for evaluating modified versions before distributing or deploying them.
+
+This section does not override the warranty and liability provisions of the MIT License.
+
+15. TERMINATION AND COMPLIANCE
+
+The permissions granted by the MIT License are subject to compliance with its conditions.
+
+Failure to comply with applicable license conditions may affect the permissions granted under the license.
+
+Nothing in this document removes rights that applicable law does not permit to be waived.
+
+16. CONTRIBUTIONS
+
+Contributions to ScreenBuddy are welcome.
+
+Contributors should ensure that submitted code and assets are either their own original work or materials they have permission to contribute.
+
+Unless a separate written agreement states otherwise, contributed material is distributed under the repository's applicable licensing terms.
+
+Contributors retain ownership of their original contributions, subject to the rights granted under the applicable license.
+
+17. LICENSE INTERPRETATION
+
+This extended document is intended to explain the project's licensing and attribution practices.
+
+The actual software license grant is the MIT License reproduced in this document.
+
+Explanatory sections do not create additional restrictions beyond the MIT License.
+
+Where a summary or explanation conflicts with the standard MIT License text, the standard MIT License governs the software license grant.
+
+18. OFFICIAL PROJECT INFORMATION
+
+Project: ScreenBuddy
+Developer: Fiesta1862
+Repository: https://github.com/Fiesta1862/Widget
+License: MIT
+Copyright: 2026 Fiesta1862
+
+For source code, updates, documentation, and project information, visit the official repository.
+
+---
+
+END OF LICENSE DOCUMENT
+
+Copyright (c) 2026 Fiesta1862.
+
+Licensed under the MIT License.
