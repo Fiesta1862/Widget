@@ -346,57 +346,13 @@ class OverlayService : Service() {
         }
         box.addView(textView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         box.visibility = View.GONE
-        box.setOnClickListener { hideDialog() }
+        // The overlay is deliberately non-interactive: taps pass through to the app below.
         dialog = box
 
         val sprite = ImageView(this).apply {
             setImageDrawable(customSprite?.let { crisp(PixelArt.scaleNearest(it, 8)) } ?: crisp(PixelArt.render(character, 8)))
             scaleType = ImageView.ScaleType.FIT_XY
-            setOnTouchListener { _, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        downRawX = event.rawX
-                        downRawY = event.rawY
-                        startWindowX = overlayParams.x
-                        startWindowY = overlayParams.y
-                        touchStartedAt = android.os.SystemClock.elapsedRealtime()
-                        dragging = false
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = event.rawX - downRawX
-                        val dy = event.rawY - downRawY
-                        val slop = ViewConfiguration.get(this@OverlayService).scaledTouchSlop
-                        if (dragging || kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop) {
-                            dragging = true
-                            val screen = resources.displayMetrics
-                            val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
-                            // Allow movement across the full display height.
-                            val minY = 0
-                            val maxY = (screen.heightPixels - dp(88)).coerceAtLeast(0)
-                            overlayParams.x = (startWindowX - dx.toInt()).coerceIn(0, maxX)
-                            overlayParams.y = (startWindowY - dy.toInt()).coerceIn(minY, maxY)
-                            try { wm.updateViewLayout(root, overlayParams) } catch (_: Exception) { }
-                        }
-                        true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        if (dragging) {
-                            getSharedPreferences("prefs", MODE_PRIVATE).edit()
-                                .putInt("overlay_x", overlayParams.x)
-                                .putInt("overlay_y", overlayParams.y)
-                                .apply()
-                        } else if (android.os.SystemClock.elapsedRealtime() - touchStartedAt > 850L) {
-                            stopSelf()
-                        } else {
-                            askNow()
-                        }
-                        true
-                    }
-                    MotionEvent.ACTION_CANCEL -> true
-                    else -> true
-                }
-            }
+            // No touch listener: WindowManager marks the whole overlay not-touchable below.
         }
         ObjectAnimator.ofFloat(sprite, "translationY", 0f, -dp(6).toFloat()).apply {
             duration = 650
@@ -424,7 +380,9 @@ class OverlayService : Service() {
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT
         )
         overlayParams.gravity = Gravity.BOTTOM or Gravity.END
