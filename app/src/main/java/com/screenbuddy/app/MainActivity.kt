@@ -7,6 +7,10 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.io.File
+import java.io.FileOutputStream
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -19,6 +23,8 @@ import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ProgressBar
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -275,9 +281,9 @@ class MainActivity : Activity() {
 
         // AI connection
         val aiCard = sectionCard()
-        aiCard.addView(sectionTitle("03  AI connection", "Screen reactions are powered by your OpenRouter account."))
+        aiCard.addView(sectionTitle("03  AI connection", "Optional: add OpenRouter for online screen reactions. Your companion also works offline."))
         aiCard.addView(fieldLabel("OPENROUTER API KEY"))
-        keyInput = styledInput(prefs.getString("key", "") ?: "", "Paste your API key", true)
+        keyInput = styledInput(prefs.getString("key", "") ?: "", "Optional — paste your API key", true)
         aiCard.addView(keyInput, matchWrap())
         aiCard.addView(fieldLabel("VISION MODEL"))
         modelInput = styledInput(
@@ -344,7 +350,10 @@ class MainActivity : Activity() {
         })
         page.addView(actions)
 
-        setContentView(scroll)
+        val appFrame = FrameLayout(this)
+        appFrame.addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        setContentView(appFrame)
+        showStartupAnimation(appFrame)
         refreshCharacterPreview(selectedIndex)
 
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -369,12 +378,22 @@ class MainActivity : Activity() {
             val uriText = getSharedPreferences("prefs", MODE_PRIVATE).getString("custom_image_uri", null)
             val bitmap = try {
                 if (uriText.isNullOrBlank()) null
-                else contentResolver.openInputStream(Uri.parse(uriText))?.use { BitmapFactory.decodeStream(it) }
+                else {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    contentResolver.openInputStream(Uri.parse(uriText))?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) null else {
+                        var sample = 1
+                        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 512) sample *= 2
+                        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                        contentResolver.openInputStream(Uri.parse(uriText))?.use { BitmapFactory.decodeStream(it, null, options) }
+                    }
+                }
             } catch (_: Exception) { null }
             if (bitmap != null) {
                 val pixel = PixelArt.pixelate(bitmap, 16)
                 if (!bitmap.isRecycled) bitmap.recycle()
-                previewImage.setImageBitmap(PixelArt.scaleNearest(pixel, 5))
+                val scaled = PixelArt.scaleNearest(pixel, 5)
+                previewImage.setImageBitmap(scaled)
                 pixel.recycle()
                 selectedCharacterName.text = getSharedPreferences("prefs", MODE_PRIVATE)
                     .getString("custom_name", "")?.ifBlank { "Custom buddy" } ?: "Custom buddy"
@@ -393,20 +412,80 @@ class MainActivity : Activity() {
     }
 
     private fun chooseCustomImage() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            }
+            startActivityForResult(intent, REQUEST_CUSTOM_IMAGE)
+        } catch (_: Exception) {
+            val fallback = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "image/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            try { startActivityForResult(Intent.createChooser(fallback, "Choose a character image"), REQUEST_CUSTOM_IMAGE) }
+            catch (_: Exception) { Toast.makeText(this, "No image picker is available on this device.", Toast.LENGTH_LONG).show() }
         }
-        startActivityForResult(intent, REQUEST_CUSTOM_IMAGE)
+    }
+
+    private fun saveCustomImage(source: Uri): Boolean {
+        return try {
+            val target = File(filesDir, "screenbuddy_custom_character.img")
+            contentResolver.openInputStream(source)?.use { input ->
+                FileOutputStream(target).use { output -> input.copyTo(output) }
+            } ?: return false
+            if (!target.exists() || target.length() == 0L) return false
+            getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                .putString("custom_image_uri", Uri.fromFile(target).toString())
+                .apply()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun showStartupAnimation(frame: FrameLayout) {
+        val splash = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(BG)
+            alpha = 1f
+        }
+        val mark = text("SB", 28f, BG, true).apply {
+            gravity = Gravity.CENTER
+            background = rounded(ACCENT, 22)
+        }
+        splash.addView(mark, LinearLayout.LayoutParams(dp(84), dp(84)))
+        splash.addView(text("SCREENBUDDY", 14f, TEXT, true).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(18), 0, dp(6))
+            letterSpacing = 0.12f
+        })
+        splash.addView(text("Preparing your little companion…", 12f, MUTED).apply {
+            gravity = Gravity.CENTER
+        })
+        val progress = ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(ACCENT)
+        }
+        splash.addView(progress, LinearLayout.LayoutParams(dp(36), dp(36)).apply { topMargin = dp(22) })
+        frame.addView(splash, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        mark.scaleX = 0.75f
+        mark.scaleY = 0.75f
+        mark.animate().scaleX(1f).scaleY(1f).setDuration(550).start()
+        mark.animate().alpha(0.72f).setDuration(650).withEndAction {
+            mark.animate().alpha(1f).setDuration(650).start()
+        }.start()
+        splash.postDelayed({
+            splash.animate().alpha(0f).setDuration(260).withEndAction {
+                frame.removeView(splash)
+            }.start()
+        }, 950)
     }
 
     private fun startBuddy() {
         val key = keyInput.text.toString().trim()
-        if (key.isEmpty()) {
-            Toast.makeText(this, "Enter your OpenRouter key first", Toast.LENGTH_LONG).show()
-            return
-        }
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
         val selectedIndex = charSpinner.selectedItemPosition
         val selectedId = if (selectedIndex == Characters.all.size) "custom"
@@ -441,16 +520,16 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_CUSTOM_IMAGE) {
             if (resultCode == RESULT_OK && data?.data != null) {
-                val uri = data.data!!
-                try {
-                    val takeFlags = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    contentResolver.takePersistableUriPermission(uri, takeFlags)
-                    getSharedPreferences("prefs", MODE_PRIVATE).edit()
-                        .putString("custom_image_uri", uri.toString()).apply()
-                    customImageStatus.text = "Custom image saved on this device"
-                    refreshCharacterPreview(charSpinner.selectedItemPosition)
-                } catch (_: Exception) {
-                    Toast.makeText(this, "Could not keep access to that image. Try another image.", Toast.LENGTH_LONG).show()
+                customImageStatus.text = "Importing image…"
+                val saved = saveCustomImage(data.data!!)
+                if (saved) {
+                    customImageStatus.text = "Image imported and saved on this device"
+                    charSpinner.setSelection(Characters.all.size)
+                    refreshCharacterPreview(Characters.all.size)
+                    Toast.makeText(this, "Character image imported", Toast.LENGTH_SHORT).show()
+                } else {
+                    customImageStatus.text = "Import failed — choose another image"
+                    Toast.makeText(this, "Could not read that image. Try a JPG or PNG.", Toast.LENGTH_LONG).show()
                 }
             }
             return
