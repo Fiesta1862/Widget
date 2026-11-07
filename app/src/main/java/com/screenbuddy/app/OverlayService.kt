@@ -230,7 +230,7 @@ class OverlayService : Service() {
             "doing in ONE or TWO short sentences (max 25 words). Stay fully in character. No emojis, no markdown, " +
             "no quotation marks around the reply. Never read out passwords, codes or private messages. " +
             "Do not interrupt typing or focused work. If the on-screen keyboard is visible, a text field is being " +
-            "edited, or the user appears to be composing a message, output exactly [QUIET] and nothing else." +
+            "edited, or the user appears to be composing a message, output exactly [KEYBOARD] and nothing else." +
             (if (recent.isNotEmpty()) "\nDon't repeat these earlier lines: " + recent.joinToString(" | ") else "")
 
     private fun askNow() {
@@ -252,7 +252,17 @@ class OverlayService : Service() {
             } else {
                 try {
                     val reply = OpenRouter.ask(apiKey, model, systemPrompt(), b64)
-                    if (reply.trim().equals("[QUIET]", ignoreCase = true)) {
+                    if (reply.trim().equals("[KEYBOARD]", ignoreCase = true)) {
+                        ui.post {
+                            quietMode = true
+                            getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                                .putBoolean("quiet_mode", true).apply()
+                            updateQuietButton()
+                            say("Oops, sorry for blocking your keys! I'll stay out of the way.")
+                            ui.postDelayed({ hideDialog() }, 2600)
+                            busy = false
+                        }
+                    } else if (reply.trim().equals("[QUIET]", ignoreCase = true)) {
                         ui.post { hideDialog(); busy = false }
                     } else {
                         recent.add(reply)
