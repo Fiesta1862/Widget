@@ -110,7 +110,7 @@ class OverlayService : Service() {
         model = prefs.getString("model", OpenRouter.DEFAULT_MODEL) ?: OpenRouter.DEFAULT_MODEL
         val selectedCharacter = prefs.getString("char", null)
         character = Characters.byId(selectedCharacter)
-        customName = prefs.getString("custom_name", "")?.trim().orEmpty()
+        customName = if (selectedCharacter == "custom") prefs.getString("custom_name", "")?.trim().orEmpty() else ""
         customPersonality = prefs.getString("custom_personality", "")?.trim().orEmpty()
         if (selectedCharacter == "custom") {
             val imageUri = prefs.getString("custom_image_uri", null)
@@ -243,7 +243,7 @@ class OverlayService : Service() {
     private fun systemPrompt(): String {
         val identity = if (customName.isNotBlank()) "Your character name is $customName. " else ""
         val persona = customPersonality.ifBlank { character.persona }
-        return identity + persona + "\\nRules: you are given a screenshot of the user's phone. React in ONE OR TWO short sentences (max 25 words). " +
+        return identity + persona + "\nRules: you are given a screenshot of the user's phone. React in ONE OR TWO short sentences (max 25 words). " +
             "Be spontaneous, playful, and context-aware: make a fresh observation, reaction, question, encouragement, or joke connected to what is actually visible. " +
             "Vary your wording and mood so you feel like a lively companion, not a repetitive screen narrator. " +
             "Sometimes use a light, playful apology as a random catchphrase, such as 'Oops, sorry for blocking your keys!', but never claim you really blocked anything. " +
