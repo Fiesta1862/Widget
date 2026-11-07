@@ -369,27 +369,59 @@ class OverlayService : Service() {
         }
         val boxWidth = minOf(dp(300), resources.displayMetrics.widthPixels - dp(16))
         root.addView(box, LinearLayout.LayoutParams(boxWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(sprite, LinearLayout.LayoutParams(dp(72), dp(72)).apply {
-            gravity = Gravity.END
-            topMargin = dp(4)
-        })
+        val characterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+        }
+        quietButton = TextView(this).apply {
+            textSize = 10f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dp(9), dp(7), dp(9), dp(7))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(35, 42, 58))
+                cornerRadius = dp(8).toFloat()
+                setStroke(dp(1), Color.rgb(115, 130, 155))
+            }
+            setOnClickListener {
+                quietMode = !quietMode
+                getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                    .putBoolean("quiet_mode", quietMode).apply()
+                updateQuietButton()
+                if (quietMode) hideDialog()
+            }
+        }
+        characterRow.addView(quietButton, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { rightMargin = dp(8) })
+        characterRow.addView(sprite, LinearLayout.LayoutParams(dp(72), dp(72)))
+        root.addView(characterRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.END; topMargin = dp(4) })
+        updateQuietButton()
 
-        val lp = WindowManager.LayoutParams(
+        overlayParams = WindowManager.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         )
-        lp.gravity = Gravity.BOTTOM or Gravity.END
-        lp.x = dp(8)
-        lp.y = dp(80)
+        overlayParams.gravity = Gravity.BOTTOM or Gravity.END
+        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        overlayParams.x = prefs.getInt("overlay_x", dp(8))
+        overlayParams.y = prefs.getInt("overlay_y", dp(80))
         try {
-            wm.addView(root, lp)
+            wm.addView(root, overlayParams)
             overlayAdded = true
         } catch (e: Exception) {
             stopSelf()
         }
+    }
+
+    private fun updateQuietButton() {
+        quietButton.text = if (quietMode) "▶ RESUME" else "Ⅱ QUIET"
     }
 
     private val hideRunnable = Runnable { hideDialog() }
