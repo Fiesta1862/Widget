@@ -228,7 +228,9 @@ class OverlayService : Service() {
     private fun systemPrompt(): String =
         character.persona + "\nRules: you are given a screenshot of the user's phone. React to what they are " +
             "doing in ONE or TWO short sentences (max 25 words). Stay fully in character. No emojis, no markdown, " +
-            "no quotation marks around the reply. Never read out passwords, codes or private messages." +
+            "no quotation marks around the reply. Never read out passwords, codes or private messages. " +
+            "Do not interrupt typing or focused work. If the on-screen keyboard is visible, a text field is being " +
+            "edited, or the user appears to be composing a message, output exactly [QUIET] and nothing else." +
             (if (recent.isNotEmpty()) "\nDon't repeat these earlier lines: " + recent.joinToString(" | ") else "")
 
     private fun askNow() {
@@ -250,9 +252,13 @@ class OverlayService : Service() {
             } else {
                 try {
                     val reply = OpenRouter.ask(apiKey, model, systemPrompt(), b64)
-                    recent.add(reply)
-                    while (recent.size > 3) recent.removeAt(0)
-                    ui.post { say(reply); busy = false }
+                    if (reply.trim().equals("[QUIET]", ignoreCase = true)) {
+                        ui.post { hideDialog(); busy = false }
+                    } else {
+                        recent.add(reply)
+                        while (recent.size > 3) recent.removeAt(0)
+                        ui.post { say(reply); busy = false }
+                    }
                 } catch (e: Exception) {
                     val msg = (e.message ?: e.javaClass.simpleName).take(140)
                     ui.post { say("Error: $msg"); busy = false }
