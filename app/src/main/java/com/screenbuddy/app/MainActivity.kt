@@ -18,6 +18,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
@@ -35,6 +36,7 @@ class MainActivity : Activity() {
     private lateinit var customNameInput: EditText
     private lateinit var customPersonalityInput: EditText
     private lateinit var customImageStatus: TextView
+    private lateinit var touchThroughSwitch: Switch
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -144,6 +146,14 @@ class MainActivity : Activity() {
         }
         col.addView(intervalInput)
 
+        col.addView(label("Touch behavior"))
+        touchThroughSwitch = Switch(this).apply {
+            text = "Touch-through mode (taps pass to apps underneath)"
+            setTextColor(Color.LTGRAY)
+            isChecked = prefs.getBoolean("touch_through", true)
+        }
+        col.addView(touchThroughSwitch)
+
         col.addView(Button(this).apply {
             text = "START BUDDY"
             setOnClickListener { startBuddy() }
@@ -204,6 +214,7 @@ class MainActivity : Activity() {
             .putString("custom_name", customNameInput.text.toString().trim().take(32))
             .putString("custom_personality", customPersonalityInput.text.toString().trim().take(1200))
             .putInt("interval", interval)
+            .putBoolean("touch_through", touchThroughSwitch.isChecked)
             .apply()
 
         if (!Settings.canDrawOverlays(this)) {
