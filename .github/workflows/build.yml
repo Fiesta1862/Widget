@@ -64,27 +64,31 @@ jobs:
           ls -la app/src/main/assets
           exit 0
 
-      # No gradle wrapper needed: this installs Gradle 8.9 directly.
+      # Keep Gradle's dependency cache between runs to avoid repeatedly hitting Maven Central.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-          cache-disabled: true
+          cache-disabled: false
 
       - name: Build debug APK
         shell: bash
         run: |
           set +e
-          for i in 1 2 3; do
-            echo "=== build attempt $i ==="
-            gradle assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee -a build-log.txt
+          for i in 1 2 3 4; do
+            echo "=== build attempt $i/4 ==="
+            gradle assembleDebug --no-daemon --stacktrace --console=plain --max-workers=2 2>&1 | tee -a build-log.txt
             if ls app/build/outputs/apk/debug/*.apk > /dev/null 2>&1; then
               echo "APK built."
               exit 0
             fi
-            sleep 10
+            if [ "$i" -lt 4 ]; then
+              delay=$((i * 30))
+              echo "Build did not complete. Waiting ${delay}s before retrying..."
+              sleep "$delay"
+            fi
           done
-          echo "Build failed after 3 attempts. See the build-log artifact."
+          echo "Build failed after 4 attempts. See the build-log artifact."
           exit 1
 
       - name: Upload build log
