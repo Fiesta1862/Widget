@@ -312,8 +312,48 @@ class OverlayService : Service() {
         val sprite = ImageView(this).apply {
             setImageDrawable(crisp(PixelArt.render(character, 8)))
             scaleType = ImageView.ScaleType.FIT_XY
-            setOnClickListener { askNow() }
-            setOnLongClickListener { stopSelf(); true }
+            setOnTouchListener { _, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downRawX = event.rawX
+                        downRawY = event.rawY
+                        startWindowX = overlayParams.x
+                        startWindowY = overlayParams.y
+                        touchStartedAt = android.os.SystemClock.elapsedRealtime()
+                        dragging = false
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX - downRawX
+                        val dy = event.rawY - downRawY
+                        val slop = ViewConfiguration.get(this@OverlayService).scaledTouchSlop
+                        if (dragging || kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop) {
+                            dragging = true
+                            val maxX = (resources.displayMetrics.widthPixels - dp(88)).coerceAtLeast(0)
+                            val maxY = (resources.displayMetrics.heightPixels - dp(100)).coerceAtLeast(0)
+                            overlayParams.x = (startWindowX - dx.toInt()).coerceIn(0, maxX)
+                            overlayParams.y = (startWindowY - dy.toInt()).coerceIn(0, maxY)
+                            try { wm.updateViewLayout(root, overlayParams) } catch (_: Exception) { }
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (dragging) {
+                            getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                                .putInt("overlay_x", overlayParams.x)
+                                .putInt("overlay_y", overlayParams.y)
+                                .apply()
+                        } else if (android.os.SystemClock.elapsedRealtime() - touchStartedAt > 850L) {
+                            stopSelf()
+                        } else {
+                            askNow()
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> true
+                    else -> true
+                }
+            }
         }
         ObjectAnimator.ofFloat(sprite, "translationY", 0f, -dp(6).toFloat()).apply {
             duration = 650
