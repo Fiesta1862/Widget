@@ -32,7 +32,9 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Base64
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.animation.LinearInterpolator
@@ -56,6 +58,15 @@ class OverlayService : Service() {
     private lateinit var root: LinearLayout
     private lateinit var dialog: LinearLayout
     private lateinit var textView: TextView
+    private lateinit var overlayParams: WindowManager.LayoutParams
+    private lateinit var quietButton: TextView
+    private var quietMode = false
+    private var downRawX = 0f
+    private var downRawY = 0f
+    private var startWindowX = 0
+    private var startWindowY = 0
+    private var touchStartedAt = 0L
+    private var dragging = false
 
     private var projection: MediaProjection? = null
     private var vd: VirtualDisplay? = null
@@ -95,6 +106,7 @@ class OverlayService : Service() {
         model = prefs.getString("model", OpenRouter.DEFAULT_MODEL) ?: OpenRouter.DEFAULT_MODEL
         character = Characters.byId(prefs.getString("char", null))
         intervalSec = prefs.getInt("interval", 30)
+        quietMode = prefs.getBoolean("quiet_mode", false)
         if (intervalSec in 1..9) intervalSec = 10
 
         bgThread = HandlerThread("screenbuddy-bg").also { it.start() }
@@ -208,7 +220,7 @@ class OverlayService : Service() {
 
     private val auto = object : Runnable {
         override fun run() {
-            askNow()
+            if (!quietMode) askNow()
             if (intervalSec > 0) ui.postDelayed(this, intervalSec * 1000L)
         }
     }
