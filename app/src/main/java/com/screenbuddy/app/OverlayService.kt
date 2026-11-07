@@ -32,7 +32,9 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Base64
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.animation.LinearInterpolator
@@ -56,6 +58,15 @@ class OverlayService : Service() {
     private lateinit var root: LinearLayout
     private lateinit var dialog: LinearLayout
     private lateinit var textView: TextView
+    private lateinit var overlayParams: WindowManager.LayoutParams
+    private lateinit var quietButton: TextView
+    private var quietMode = false
+    private var downRawX = 0f
+    private var downRawY = 0f
+    private var startWindowX = 0
+    private var startWindowY = 0
+    private var touchStartedAt = 0L
+    private var dragging = false
 
     private var projection: MediaProjection? = null
     private var vd: VirtualDisplay? = null
@@ -95,6 +106,7 @@ class OverlayService : Service() {
         model = prefs.getString("model", OpenRouter.DEFAULT_MODEL) ?: OpenRouter.DEFAULT_MODEL
         character = Characters.byId(prefs.getString("char", null))
         intervalSec = prefs.getInt("interval", 30)
+        quietMode = prefs.getBoolean("quiet_mode", false)
         if (intervalSec in 1..9) intervalSec = 10
 
         bgThread = HandlerThread("screenbuddy-bg").also { it.start() }
@@ -208,7 +220,7 @@ class OverlayService : Service() {
 
     private val auto = object : Runnable {
         override fun run() {
-            askNow()
+            if (!quietMode) askNow()
             if (intervalSec > 0) ui.postDelayed(this, intervalSec * 1000L)
         }
     }
@@ -216,7 +228,9 @@ class OverlayService : Service() {
     private fun systemPrompt(): String =
         character.persona + "\nRules: you are given a screenshot of the user's phone. React to what they are " +
             "doing in ONE or TWO short sentences (max 25 words). Stay fully in character. No emojis, no markdown, " +
-            "no quotation marks around the reply. Never read out passwords, codes or private messages." +
+            "no quotation marks around the reply. Never read out passwords, codes or private messages. " +
+            "Do not interrupt typing or focused work. If the on-screen keyboard is visible, a text field is being " +
+            "edited, or the user appears to be composing a message, output exactly [KEYBOARD] and nothing else." +
             (if (recent.isNotEmpty()) "\nDon't repeat these earlier lines: " + recent.joinToString(" | ") else "")
 
     private fun askNow() {
@@ -238,9 +252,23 @@ class OverlayService : Service() {
             } else {
                 try {
                     val reply = OpenRouter.ask(apiKey, model, systemPrompt(), b64)
-                    recent.add(reply)
-                    while (recent.size > 3) recent.removeAt(0)
-                    ui.post { say(reply); busy = false }
+                    if (reply.trim().equals("[KEYBOARD]", ignoreCase = true)) {
+                        ui.post {
+                            quietMode = true
+                            getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                                .putBoolean("quiet_mode", true).apply()
+                            updateQuietButton()
+                            say("Oops, sorry for blocking your keys! I'll stay out of the way.")
+                            ui.postDelayed({ hideDialog() }, 2600)
+                            busy = false
+                        }
+                    } else if (reply.trim().equals("[QUIET]", ignoreCase = true)) {
+                        ui.post { hideDialog(); busy = false }
+                    } else {
+                        recent.add(reply)
+                        while (recent.size > 3) recent.removeAt(0)
+                        ui.post { say(reply); busy = false }
+                    }
                 } catch (e: Exception) {
                     val msg = (e.message ?: e.javaClass.simpleName).take(140)
                     ui.post { say("Error: $msg"); busy = false }
@@ -294,8 +322,52 @@ class OverlayService : Service() {
         val sprite = ImageView(this).apply {
             setImageDrawable(crisp(PixelArt.render(character, 8)))
             scaleType = ImageView.ScaleType.FIT_XY
-            setOnClickListener { askNow() }
-            setOnLongClickListener { stopSelf(); true }
+            setOnTouchListener { _, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downRawX = event.rawX
+                        downRawY = event.rawY
+                        startWindowX = overlayParams.x
+                        startWindowY = overlayParams.y
+                        touchStartedAt = android.os.SystemClock.elapsedRealtime()
+                        dragging = false
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX - downRawX
+                        val dy = event.rawY - downRawY
+                        val slop = ViewConfiguration.get(this@OverlayService).scaledTouchSlop
+                        if (dragging || kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop) {
+                            dragging = true
+                            val screen = resources.displayMetrics
+                            val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
+                            // Keep the buddy in the upper part of the display. The lower
+                            // area is reserved for the on-screen keyboard and its keys.
+                            val minY = (screen.heightPixels * 0.55f).toInt()
+                            val maxY = (screen.heightPixels - dp(100)).coerceAtLeast(minY)
+                            overlayParams.x = (startWindowX - dx.toInt()).coerceIn(0, maxX)
+                            overlayParams.y = (startWindowY - dy.toInt()).coerceIn(minY, maxY)
+                            try { wm.updateViewLayout(root, overlayParams) } catch (_: Exception) { }
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (dragging) {
+                            getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                                .putInt("overlay_x", overlayParams.x)
+                                .putInt("overlay_y", overlayParams.y)
+                                .apply()
+                        } else if (android.os.SystemClock.elapsedRealtime() - touchStartedAt > 850L) {
+                            stopSelf()
+                        } else {
+                            askNow()
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> true
+                    else -> true
+                }
+            }
         }
         ObjectAnimator.ofFloat(sprite, "translationY", 0f, -dp(6).toFloat()).apply {
             duration = 650
@@ -311,27 +383,64 @@ class OverlayService : Service() {
         }
         val boxWidth = minOf(dp(300), resources.displayMetrics.widthPixels - dp(16))
         root.addView(box, LinearLayout.LayoutParams(boxWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(sprite, LinearLayout.LayoutParams(dp(72), dp(72)).apply {
-            gravity = Gravity.END
-            topMargin = dp(4)
-        })
+        val characterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+        }
+        quietButton = TextView(this).apply {
+            textSize = 10f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dp(9), dp(7), dp(9), dp(7))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(35, 42, 58))
+                cornerRadius = dp(8).toFloat()
+                setStroke(dp(1), Color.rgb(115, 130, 155))
+            }
+            setOnClickListener {
+                quietMode = !quietMode
+                getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                    .putBoolean("quiet_mode", quietMode).apply()
+                updateQuietButton()
+                if (quietMode) hideDialog()
+            }
+        }
+        characterRow.addView(quietButton, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { rightMargin = dp(8) })
+        characterRow.addView(sprite, LinearLayout.LayoutParams(dp(72), dp(72)))
+        root.addView(characterRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.END; topMargin = dp(4) })
+        updateQuietButton()
 
-        val lp = WindowManager.LayoutParams(
+        overlayParams = WindowManager.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         )
-        lp.gravity = Gravity.BOTTOM or Gravity.END
-        lp.x = dp(8)
-        lp.y = dp(80)
+        overlayParams.gravity = Gravity.BOTTOM or Gravity.END
+        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val screen = resources.displayMetrics
+        val maxX = (screen.widthPixels - dp(88)).coerceAtLeast(0)
+        val minY = (screen.heightPixels * 0.55f).toInt()
+        val maxY = (screen.heightPixels - dp(100)).coerceAtLeast(minY)
+        // Start at the top-right so the buddy never covers the keyboard by default.
+        overlayParams.x = prefs.getInt("overlay_x", dp(8)).coerceIn(0, maxX)
+        overlayParams.y = prefs.getInt("overlay_y", maxY).coerceIn(minY, maxY)
         try {
-            wm.addView(root, lp)
+            wm.addView(root, overlayParams)
             overlayAdded = true
         } catch (e: Exception) {
             stopSelf()
         }
+    }
+
+    private fun updateQuietButton() {
+        quietButton.text = if (quietMode) "▶ RESUME" else "Ⅱ QUIET"
     }
 
     private val hideRunnable = Runnable { hideDialog() }
